@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Writer's Universe</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=DM+Sans:wght@300;400;500;600&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet"/>
+
+<!-- ═══════════════════════════════════════════════════════
+     FIREBASE BOOTSTRAP — same pattern as reading journal
+     Runs first, exposes window.__fb to the main script
+     ═══════════════════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp }       from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged,
+           GoogleAuthProvider, signInWithRedirect, getRedirectResult,
+           signOut, signInWithCredential, linkWithRedirect }
+    from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
+  import { getFirestore, doc, getDoc, setDoc, collection,
+           getDocs, writeBatch, deleteDoc }
+    from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+
+  // ── YOUR FIREBASE CONFIG ──────────────────────────────
+  // Replace with your own project's config from Firebase Console
+  // (Project Settings → Your apps → SDK setup → Config)
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBcGQFVcK3nMps8C1HX3qA1pn690j9CsQM",
+    authDomain:        "reading-journal-f3e21.firebaseapp.com",
+    databaseURL:       "https://reading-journal-f3e21-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId:         "reading-journal-f3e21",
+    storageBucket:     "reading-journal-f3e21.firebasestorage.app",
+    messagingSenderId: "1069852447492",
+    appId:             "1:1069852447492:web:39bf3272d4605c64753651"
+  };
+  // ─────────────────────────────────────────────────────
+
+  let _app, _auth, _db;
+  try {
+    _app  = initializeApp(firebaseConfig);
+    _auth = getAuth(_app);
+    _db   = getFirestore(_app);
+    window.__fb = {
+      app: _app, auth: _auth, db: _db,
+      signInAnonymously, onAuthStateChanged,
+      GoogleAuthProvider, signInWithRedirect, getRedirectResult,
+      signOut, signInWithCredential, linkWithRedirect,
+      doc, getDoc, setDoc, collection, getDocs, writeBatch, deleteDoc,
+    };
+  } catch(e) {
+    console.error('[WU Firebase] init failed:', e);
+    window.__fb = null;
+  }
+
+  if (window.__fb) {
+    // Handle pending Google redirect
+    getRedirectResult(_auth).then(result => {
+      if (result?.user && typeof window.showToast === 'function')
+        window.showToast('Signed in as ' + (result.user.email || 'Google'));
+    }).catch(err => {
+      console.error('[WU] redirect error:', err.code);
+      if (err.code === 'auth/credential-already-in-use') {
+        const cred = GoogleAuthProvider.credentialFromError(err);
+        if (cred) signInWithCredential(_auth, cred).catch(()=>{});
+      }
+    });
+
+    onAuthStateChanged(_auth, user => {
+      if (user) {
+        if (typeof window.setCloudStatus === 'function') window.setCloudStatus('connected', user.uid);
+        if (typeof window._cloudReady   === 'function') setTimeout(() => window._cloudReady(), 300);
+      } else {
+        if (typeof window.setCloudStatus === 'function') window.setCloudStatus('signedout');
+      }
+    });
+  } else {
+    setTimeout(() => {
+      if (typeof window.setCloudStatus === 'function') window.setCloudStatus('error');
+    }, 500);
+  }
+</script>
+
+<style>
+/* ── ROOT ── */
+:root{
+  --bg:#0d0a12; --bg-card:#13101a; --bg-deep:#0a0810; --bg-panel:#181225;
+  --border:#2a2040; --accent:#9b59d0; --accent-dim:#6b3fa018;
+  --gold:#d4af37; --rose:#e8547a; --crimson:#8b2035; --sapphire:#2e86ab;
+  --text:#f0e8ff; --text-soft:#b8a8d8; --text-muted:#7a6a9a;
+  --nav-h:64px; --r:14px; --r-sm:9px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;}
+body{display:flex;flex-direction:column;}
+
+/* ── HEADER ── */
+.app-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 10px;background:var(--bg-deep);border-bottom:1px solid var(--border);flex-shrink:0;gap:8px;}
+.logo{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:var(--gold);letter-spacing:-.02em;line-height:1.1;}
+.logo span{color:var(--text-muted);font-size:11px;font-weight:400;display:block;font-family:'DM Sans',sans-serif;letter-spacing:0;margin-top:1px;}
+.header-right{display:flex;gap:6px;align-items:center;flex-shrink:0;}
+.hbtn{background:var(--bg-panel);border:1px solid var(--border);border-radius:8px;padding:6px 11px;color:var(--text-soft);font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:.15s;white-space:nowrap;}
+.hbtn:hover{border-color:var(--accent);color:var(--text);}
+.hbtn.gold{border-color:var(--gold)55;color:var(--gold);}
+
+/* Cloud status pill */
+.cloud-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;font-size:11px;font-family:'DM Sans',sans-serif;cursor:pointer;border:1px solid var(--border);background:var(--bg-panel);color:var(--text-muted);transition:.15s;}
+.cloud-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--text-muted);flex-shrink:0;transition:.3s;}
+.cloud-pill.connected .dot{background:#2ecc71;}
+.cloud-pill.connected{border-color:#2ecc7155;color:#2ecc71;}
+.cloud-pill.syncing .dot{background:var(--gold);animation:pulse .8s infinite;}
+.cloud-pill.signedout{border-color:var(--border);}
+.cloud-pill.error .dot{background:var(--rose);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+
+/* ── SCROLL ── */
+.scroll-area{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+.scroll-area::-webkit-scrollbar{width:4px;}
+.scroll-area::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* ── NAV ── */
+.bottom-nav{display:flex;background:var(--bg-deep);border-top:1px solid var(--border);flex-shrink:0;height:var(--nav-h);padding:0 4px;}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 2px;cursor:pointer;border:none;background:none;color:var(--text-muted);font-size:10px;font-family:'DM Sans',sans-serif;font-weight:500;transition:.15s;border-top:2px solid transparent;}
+.nav-item .ni{font-size:20px;line-height:1;}
+.nav-item.active{color:var(--accent);border-top-color:var(--accent);}
+
+/* ── PAGES ── */
+.page{display:none;padding:18px 16px 24px;}
+.page.active{display:block;}
+
+/* ── CARDS ── */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:14px;}
+
+/* ── FORM ── */
+.field{margin-bottom:14px;}
+.label{display:block;font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px;}
+.input,.textarea,.sel{width:100%;background:var(--bg-deep);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 13px;color:var(--text);font-family:'Crimson Text',serif;font-size:15px;line-height:1.5;outline:none;transition:.15s;}
+.textarea{resize:vertical;min-height:72px;}
+.input:focus,.textarea:focus,.sel:focus{border-color:var(--accent);box-shadow:0 0 0 3px #9b59d018;}
+.input::placeholder,.textarea::placeholder{color:var(--text-muted);font-style:italic;}
+.sel{-webkit-appearance:none;appearance:none;cursor:pointer;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 15px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg-panel);color:var(--text-soft);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:.15s;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--text);}
+.btn.acc{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+.btn.gold{border-color:var(--gold)55;color:var(--gold);background:#d4af3708;}
+.btn.gold:hover{background:#d4af3716;}
+.btn.rose{border-color:var(--rose)55;color:var(--rose);}
+.btn.sm{padding:5px 10px;font-size:12px;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+
+/* ── AI BOX ── */
+.ai-box{background:var(--bg-deep);border:1px solid var(--accent)33;border-left:3px solid var(--accent);border-radius:var(--r-sm);padding:14px 15px;margin-top:12px;font-family:'Crimson Text',serif;font-size:15px;line-height:1.75;color:var(--text-soft);white-space:pre-wrap;animation:fadeUp .3s ease;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+/* ── CHIPS ── */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;background:var(--bg-panel);border:1px solid var(--border);color:var(--text-soft);font-family:'DM Sans',sans-serif;white-space:nowrap;}
+
+/* ── SECTION TABS ── */
+.sec-tabs{display:flex;overflow-x:auto;border-bottom:1px solid var(--border);margin:-18px -16px 20px;padding:0 16px;scrollbar-width:none;}
+.sec-tabs::-webkit-scrollbar{display:none;}
+.stab{padding:12px 13px;font-size:12px;font-weight:600;color:var(--text-muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:.15s;font-family:'DM Sans',sans-serif;letter-spacing:.03em;background:none;border-top:none;border-left:none;border-right:none;}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+/* ── NOVEL HOME ── */
+.hero{text-align:center;padding:36px 20px 28px;background:radial-gradient(ellipse at top,#1a0e2e 0%,var(--bg) 70%);}
+.hero h1{font-family:'Playfair Display',serif;font-size:28px;font-weight:700;color:var(--text);margin-bottom:8px;letter-spacing:-.02em;}
+.hero h1 span{color:var(--gold);}
+.hero p{font-family:'Crimson Text',serif;font-size:15px;color:var(--text-muted);font-style:italic;}
+.stat-row{display:flex;gap:10px;margin-bottom:16px;}
+.sbox{flex:1;background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;text-align:center;}
+.sbox .sv{font-family:'Playfair Display',serif;font-size:22px;color:var(--gold);}
+.sbox .sl{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.novels-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding-bottom:8px;}
+.novel-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:15px 14px;cursor:pointer;transition:.2s;border-top:3px solid var(--accent);position:relative;}
+.novel-card:active{transform:scale(.98);}
+.nc-title{font-family:'Playfair Display',serif;font-size:15px;line-height:1.3;color:var(--text);margin-bottom:3px;}
+.nc-sub{font-size:11px;color:var(--text-muted);margin-bottom:10px;font-style:italic;font-family:'Crimson Text',serif;}
+.nc-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--text-muted);font-size:15px;cursor:pointer;padding:2px 5px;}
+.add-card{background:none;border:2px dashed var(--border);border-radius:var(--r);padding:15px 14px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;cursor:pointer;color:var(--text-muted);font-size:13px;font-family:'DM Sans',sans-serif;transition:.15s;min-height:110px;}
+.add-card:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── ITEM TABS (chars/scenes/settings) ── */
+.item-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.itab{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:500;background:var(--bg-panel);border:1px solid var(--border);color:var(--text-muted);cursor:pointer;font-family:'DM Sans',sans-serif;transition:.15s;}
+.itab.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+
+/* ── ACT CARDS ── */
+.act-card{background:var(--bg-panel);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px;margin-bottom:12px;border-left:3px solid var(--accent);}
+
+/* ── PAGE TITLES ── */
+.ptitle{font-family:'Playfair Display',serif;font-size:21px;color:var(--text);margin-bottom:4px;}
+.psub{font-family:'Crimson Text',serif;font-size:14px;color:var(--text-muted);font-style:italic;margin-bottom:20px;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%) translateY(20px);background:#1e1630;border:1px solid var(--accent)55;border-radius:10px;padding:10px 18px;font-size:13px;color:var(--text-soft);opacity:0;transition:.3s;pointer-events:none;z-index:9999;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ── MODAL OVERLAY ── */
+.modal-overlay{position:fixed;inset:0;background:#0a0810ee;z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal-box{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:440px;width:100%;}
+.modal-title{font-family:'Playfair Display',serif;font-size:19px;color:var(--gold);margin-bottom:10px;}
+.modal-body{font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:16px;font-family:'Crimson Text',serif;}
+.modal-actions{display:flex;gap:10px;}
+
+/* ── SPIN ── */
+.spin{animation:spin 1s linear infinite;display:inline-block;}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+/* ── SEC PAGES ── */
+.sec-page{display:none;}
+.sec-page.active{display:block;}
+
+/* ── CLOUD MODAL ── */
+.cloud-modal{position:fixed;inset:0;background:#0a0810ee;z-index:9990;display:none;align-items:flex-end;justify-content:center;}
+.cloud-modal.open{display:flex;}
+.cloud-sheet{background:var(--bg-card);border:1px solid var(--border);border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:520px;max-height:80vh;overflow-y:auto;}
+.cloud-sheet h3{font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);margin-bottom:14px;}
+
+@media(min-width:600px){
+  .novels-grid{grid-template-columns:repeat(3,1fr);}
+  .page{max-width:700px;margin:0 auto;}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="app-header">
+  <div class="logo">
+    Writer's Universe
+    <span id="header-sub">Your novels, your worlds</span>
+  </div>
+  <div class="header-right">
+    <div class="cloud-pill signedout" id="cloudPill" onclick="openCloudModal()">
+      <span class="dot"></span>
+      <span id="cloudLabel">Sign in</span>
+    </div>
+    <button class="hbtn" id="btn-back" style="display:none" onclick="backToHome()">← Novels</button>
+    <button class="hbtn gold" onclick="exportData()">⬇</button>
+  </div>
+</div>
+
+<!-- SCROLL -->
+<div class="scroll-area" id="main-scroll">
+
+  <!-- ════ HOME ════ -->
+  <div class="page active" id="page-home">
+    <div class="hero">
+      <h1>Writer's <span>Universe</span></h1>
+      <p>Every novel. Every world.<br>Every story you're born to tell.</p>
+    </div>
+    <div class="stat-row" id="home-stats" style="display:none">
+      <div class="sbox"><div class="sv" id="s-novels">0</div><div class="sl">Novels</div></div>
+      <div class="sbox"><div class="sv" id="s-chars">0</div><div class="sl">Characters</div></div>
+      <div class="sbox"><div class="sv" id="s-scenes">0</div><div class="sl">Scenes</div></div>
+    </div>
+    <div class="novels-grid" id="novels-grid"></div>
+  </div>
+
+  <!-- ════ NOVEL VIEW ════ -->
+  <div class="page" id="page-novel">
+    <div class="sec-tabs" id="sec-tabs">
+      <button class="stab active" onclick="switchSec('overview',this)">📖 Overview</button>
+      <button class="stab" onclick="switchSec('soul',this)">✨ Soul</button>
+      <button class="stab" onclick="switchSec('aesthetic',this)">🎨 Aesthetic</button>
+      <button class="stab" onclick="switchSec('characters',this)">👤 Characters</button>
+      <button class="stab" onclick="switchSec('dynamic',this)">💞 Dynamic</button>
+      <button class="stab" onclick="switchSec('journey',this)">💔 Journey</button>
+      <button class="stab" onclick="switchSec('blurb',this)">📝 Blurb Lab</button>
+      <button class="stab" onclick="switchSec('settings',this)">🗺 Settings</button>
+      <button class="stab" onclick="switchSec('scenes',this)">🎬 Scenes</button>
+      <button class="stab" onclick="switchSec('notes',this)">📌 Notes</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <div class="sec-page active" id="sec-overview">
+      <div class="ptitle" id="nov-title-display">Novel Overview</div>
+      <div class="psub">The foundation — title, synopsis, status.</div>
+      <div class="card">
+        <div class="row2"><div class="field"><label class="label">Title</label><input class="input" id="ov-title" placeholder="Daastan-e-Ruhaniyat" oninput="sf('overview','title',this.value);updateTitle()"/></div>
+        <div class="field"><label class="label">Subtitle / Series</label><input class="input" id="ov-subtitle" placeholder="Book 1 — The Singhania Series" oninput="sf('overview','subtitle',this.value)"/></div></div>
+        <div class="field"><label class="label">Logline</label><input class="input" id="ov-logline" placeholder="One sentence pitch…" oninput="sf('overview','logline',this.value)"/></div>
+        <div class="field"><label class="label">Synopsis</label><textarea class="textarea" id="ov-synopsis" rows="6" placeholder="The full story summary…" oninput="sf('overview','synopsis',this.value)"></textarea></div>
+        <div class="row3">
+          <div class="field"><label class="label">Genre</label><input class="input" id="ov-genre" placeholder="Contemporary Indian Romance" oninput="sf('overview','genre',this.value)"/></div>
+          <div class="field"><label class="label">Word Count</label><input class="input" id="ov-wc" placeholder="90,000" oninput="sf('overview','wordCount',this.value)"/></div>
+          <div class="field"><label class="label">Status</label>
+            <select class="sel" id="ov-status" onchange="sf('overview','status',this.value)">
+              <option>Idea</option><option>Outlining</option><option selected>Drafting</option>
+              <option>First Draft</option><option>Editing</option><option>Polishing</option><option>Complete</option>
+            </select></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SOUL -->
+    <div class="sec-page" id="sec-soul">
+      <div class="ptitle">Soul of the Book</div><div class="psub">Tropes, vibes, comps — what makes this book itself.</div>
+      <div class="card">
+        <div class="field"><label class="label">Core Tropes</label><textarea class="textarea" id="soul-core" rows="2" placeholder="Contract Marriage · Slow Burn · Enemies to Lovers…" oninput="sf('soul','coretropes',this.value)"></textarea></div>
+        <div class="field"><label class="label">Character Dynamic Tropes</label><textarea class="textarea" id="soul-dyn" rows="2" placeholder="Cold CEO × Warm Sunshine · Grumpy × Sunshine…" oninput="sf('soul','dynamictropes',this.value)"></textarea></div>
+        <div class="field"><label class="label">Mood / Vibe Tags</label><textarea class="textarea" id="soul-vibes" rows="2" placeholder="Emotional Slow Burn · Banter Heavy · Ugly Cry Warning…" oninput="sf('soul','vibes',this.value)"></textarea></div>
+        <div class="row2">
+          <div class="field"><label class="label">Comp Titles</label><textarea class="textarea" id="soul-comps" rows="2" placeholder="Twisted Love · The Shaadi Set-Up…" oninput="sf('soul','comps',this.value)"></textarea></div>
+          <div class="field"><label class="label">Target Reader</label><textarea class="textarea" id="soul-target" rows="2" placeholder="South Asian romance readers, Ana Huang fans…" oninput="sf('soul','targetReader',this.value)"></textarea></div>
+        </div>
+        <div class="field"><label class="label">Emotional Promise</label><textarea class="textarea" id="soul-promise" rows="3" placeholder="What the reader FEELS…" oninput="sf('soul','emotionalPromise',this.value)"></textarea></div>
+        <div class="btn-row">
+          <button class="btn acc" onclick="ai('soul_vibes')"><span id="i-sv">✦</span> Vibe Tags</button>
+          <button class="btn gold" onclick="ai('soul_tropes')"><span id="i-st">✦</span> Suggest Tropes</button>
+          <button class="btn sm" onclick="ai('soul_comps')"><span id="i-sc">✦</span> Find Comps</button>
+        </div>
+        <div id="ai-soul"></div>
+      </div>
+    </div>
+
+    <!-- AESTHETIC -->
+    <div class="sec-page" id="sec-aesthetic">
+      <div class="ptitle">Aesthetic Universe</div><div class="psub">Colors, Pinterest energy, the sensory world.</div>
+      <div class="card">
+        <div class="field"><label class="label">Overall Visual Mood</label><textarea class="textarea" id="aes-mood" rows="3" placeholder="Dark wood boardrooms and soft morning light…" oninput="sf('aesthetic','overallAesthetic',this.value)"></textarea></div>
+        <div class="field"><label class="label">Colour Palette</label><textarea class="textarea" id="aes-palette" rows="2" placeholder="Deep navy · Warm gold · Burgundy where they meet…" oninput="sf('aesthetic','palette',this.value)"></textarea></div>
+        <div class="row2">
+          <div class="field"><label class="label">Season / Time of Day</label><input class="input" id="aes-season" placeholder="Mumbai monsoon evenings, 2am…" oninput="sf('aesthetic','seasonTime',this.value)"/></div>
+          <div class="field"><label class="label">Pinterest Keywords</label><textarea class="textarea" id="aes-pin" rows="2" placeholder="old money India · moody romance…" oninput="sf('aesthetic','pinterestKeywords',this.value)"></textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn acc" onclick="ai('aes_full')"><span id="i-af">✦</span> Generate Aesthetic</button>
+          <button class="btn gold" onclick="ai('aes_pin')"><span id="i-ap">✦</span> Pinterest Keywords</button>
+        </div>
+        <div id="ai-aes"></div>
+      </div>
+    </div>
+
+    <!-- CHARACTERS -->
+    <div class="sec-page" id="sec-characters">
+      <div class="ptitle">Characters</div><div class="psub">Full profiles — personality, arc, aesthetic.</div>
+      <div class="item-tabs" id="char-tabs"></div>
+      <button class="btn gold" style="margin-bottom:14px" onclick="addChar()">+ Add Character</button>
+      <div id="char-editor"></div>
+    </div>
+
+    <!-- DYNAMIC -->
+    <div class="sec-page" id="sec-dynamic">
+      <div class="ptitle">The Dynamic</div><div class="psub">How the leads move around each other.</div>
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label class="label">Push / Pull</label><textarea class="textarea" id="dyn-pp" rows="3" placeholder="How they push away and what pulls back…" oninput="sf('dynamic','pushPull',this.value)"></textarea></div>
+          <div class="field"><label class="label">Tension Style</label><textarea class="textarea" id="dyn-ts" rows="3" placeholder="Electric silence. Loaded glances…" oninput="sf('dynamic','tensionStyle',this.value)"></textarea></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="label">Banter vs Silence</label><textarea class="textarea" id="dyn-bv" rows="2" oninput="sf('dynamic','banterVsSilence',this.value)"></textarea></div>
+          <div class="field"><label class="label">Who Falls First</label><textarea class="textarea" id="dyn-wf" rows="2" oninput="sf('dynamic','whoFallsFirst',this.value)"></textarea></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label class="label">Core Wound</label><textarea class="textarea" id="dyn-cw" rows="3" oninput="sf('dynamic','coreWound',this.value)"></textarea></div>
+          <div class="field"><label class="label">Resolution</label><textarea class="textarea" id="dyn-res" rows="3" oninput="sf('dynamic','resolution',this.value)"></textarea></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn acc" onclick="ai('dyn_map')"><span id="i-dm">✦</span> Map Dynamic</button>
+          <button class="btn gold" onclick="ai('dyn_scene')"><span id="i-ds">✦</span> Tension Scene</button>
+        </div>
+        <div id="ai-dyn"></div>
+      </div>
+    </div>
+
+    <!-- JOURNEY -->
+    <div class="sec-page" id="sec-journey">
+      <div class="ptitle">Emotional Journey</div><div class="psub">Act by act — wounds, beats, the moments that wreck readers.</div>
+      <div id="acts-container"></div>
+      <div class="btn-row">
+        <button class="btn" onclick="addAct()">+ Add Act</button>
+        <button class="btn acc" onclick="ai('journey')"><span id="i-j">✦</span> Generate Journey</button>
+      </div>
+      <div id="ai-journey"></div>
+    </div>
+
+    <!-- BLURB -->
+    <div class="sec-page" id="sec-blurb">
+      <div class="ptitle">Blurb Lab</div><div class="psub">Words that make strangers fall in love with your book.</div>
+      <div class="card">
+        <div class="field"><label class="label">Short Blurb (2–3 lines)</label><textarea class="textarea" id="bl-short" rows="3" oninput="sf('blurb','short',this.value)"></textarea></div>
+        <div class="field"><label class="label">Full Back-Cover Blurb</label><textarea class="textarea" id="bl-back" rows="7" oninput="sf('blurb','backCover',this.value)"></textarea></div>
+        <div class="field"><label class="label">BookTok Hook Lines</label><textarea class="textarea" id="bl-btok" rows="4" oninput="sf('blurb','booktokHook',this.value)"></textarea></div>
+        <div class="field"><label class="label">Long Pitch / Query Blurb</label><textarea class="textarea" id="bl-long" rows="5" oninput="sf('blurb','long',this.value)"></textarea></div>
+        <div class="btn-row">
+          <button class="btn acc" onclick="ai('blurb_short')"><span id="i-bs">✦</span> Short Blurb</button>
+          <button class="btn gold" onclick="ai('blurb_full')"><span id="i-bf">✦</span> Full Blurb</button>
+          <button class="btn sm" onclick="ai('blurb_btok')"><span id="i-bb">✦</span> BookTok Hooks</button>
+        </div>
+        <div id="ai-blurb"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="sec-page" id="sec-settings">
+      <div class="ptitle">Settings</div><div class="psub">The places that hold your story — and what they mean.</div>
+      <div class="item-tabs" id="setting-tabs"></div>
+      <button class="btn gold" style="margin-bottom:14px" onclick="addSetting()">+ Add Setting</button>
+      <div id="setting-editor"></div>
+    </div>
+
+    <!-- SCENES -->
+    <div class="sec-page" id="sec-scenes">
+      <div class="ptitle">Scene Mood Boards</div><div class="psub">Sensory blueprint — color, music, weather, tension.</div>
+      <div class="item-tabs" id="scene-tabs"></div>
+      <button class="btn gold" style="margin-bottom:14px" onclick="addScene()">+ New Scene Board</button>
+      <div id="scene-editor"></div>
+    </div>
+
+    <!-- NOTES -->
+    <div class="sec-page" id="sec-notes">
+      <div class="ptitle">Research & Notes</div><div class="psub">Cultural context, Hindi glossary, continuity, research.</div>
+      <div class="card">
+        <div class="field"><label class="label">Cultural References</label><textarea class="textarea" id="n-cultural" rows="4" oninput="sf('notes','cultural',this.value)"></textarea></div>
+        <div class="field"><label class="label">Hindi / Urdu Terminology</label><textarea class="textarea" id="n-hindi" rows="4" oninput="sf('notes','hindi',this.value)"></textarea></div>
+        <div class="field"><label class="label">Continuity Tracker</label><textarea class="textarea" id="n-cont" rows="4" oninput="sf('notes','continuity',this.value)"></textarea></div>
+        <div class="field"><label class="label">Research Notes</label><textarea class="textarea" id="n-res" rows="4" oninput="sf('notes','research',this.value)"></textarea></div>
+      </div>
+    </div>
+
+  </div><!-- /page-novel -->
+</div><!-- /scroll-area -->
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <button class="nav-item active" id="nav-home" onclick="showHome()"><span class="ni">🏠</span>Home</button>
+  <button class="nav-item" id="nav-novels" onclick="showHome()"><span class="ni">📚</span>Novels</button>
+  <button class="nav-item" id="nav-scenes" onclick="quickJump('scenes')"><span class="ni">🎬</span>Scenes</button>
+  <button class="nav-item" id="nav-chars" onclick="quickJump('characters')"><span class="ni">👤</span>Characters</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<!-- CLOUD MODAL -->
+<div class="cloud-modal" id="cloudModal" onclick="if(event.target===this)closeCloudModal()">
+  <div class="cloud-sheet">
+    <h3>☁️ Cloud Sync</h3>
+    <div id="cloud-user-info" style="font-size:13px;color:var(--text-muted);margin-bottom:16px;font-family:'Crimson Text',serif;"></div>
+    <div class="btn-row" style="margin-bottom:16px">
+      <button class="btn acc" id="btn-google-signin" onclick="signInGoogle()">Sign in with Google</button>
+      <button class="btn rose" id="btn-signout" style="display:none" onclick="doSignOut()">Sign out</button>
+    </div>
+    <div style="height:1px;background:var(--border);margin:14px 0"></div>
+    <div class="btn-row">
+      <button class="btn" onclick="cloudUpload()">⬆ Upload to Cloud</button>
+      <button class="btn" onclick="cloudPull()">⬇ Pull from Cloud</button>
+    </div>
+    <div id="cloud-status-msg" style="margin-top:12px;font-size:13px;color:var(--text-muted);font-family:'Crimson Text',serif;font-style:italic;"></div>
+    <div style="margin-top:16px;font-size:12px;color:var(--text-muted);line-height:1.6">
+      Your novel data syncs to Firestore. Sign in with Google to access your universe on any device.<br>
+      <strong style="color:var(--text-muted)">Note:</strong> Replace the Firebase config in the &lt;script type="module"&gt; block with your own project credentials.
+    </div>
+    <button class="btn sm" style="margin-top:14px" onclick="closeCloudModal()">Close</button>
+  </div>
+</div>
+
+<!-- GEMINI KEY MODAL -->
+<div id="gemini-modal" style="display:none;position:fixed;inset:0;background:#0a0810ee;z-index:9999;align-items:center;justify-content:center;padding:20px;">
+  <div class="modal-box">
+    <div class="modal-title">✦ Gemini AI Key</div>
+    <div class="modal-body">
+      Paste your free Gemini API key to enable AI suggestions. Get one free (no credit card) at
+      <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com</a>.<br><br>
+      Saved only on this device in localStorage.
+    </div>
+    <div class="field"><label class="label">API Key</label>
+      <input class="input" id="gemini-key-input" type="password" placeholder="AIza…"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn acc" onclick="saveGeminiKey()" style="flex:1">Save Key</button>
+      <button class="btn" onclick="closeGeminiModal()">Cancel</button>
+    </div>
+    <button onclick="clearGeminiKey()" style="width:100%;margin-top:10px;background:none;border:none;color:var(--rose);font-size:12px;cursor:pointer;opacity:.7">Remove saved key</button>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// STORAGE KEYS
+// ══════════════════════════════════════════════════════
+const WU_KEY    = 'wu_novels_v1';
+const GEMINI_KEY_STORE = 'wu_gemini_key';
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let novels = [];
+let activeId = null;
+let activeCharId = null;
+let activeSettingId = null;
+let activeSceneId = null;
+let _cloudUser = null;
+
+// ══════════════════════════════════════════════════════
+// LOAD / SAVE
+// ══════════════════════════════════════════════════════
+function loadNovels() {
+  try {
+    const d = localStorage.getItem(WU_KEY);
+    novels = d ? JSON.parse(d) : [seedDaastan()];
+  } catch { novels = [seedDaastan()]; }
+}
+function saveNovels() {
+  try { localStorage.setItem(WU_KEY, JSON.stringify(novels)); } catch {}
+  cloudAutoSync();
+}
+function getNovel() { return novels.find(n => n.id === activeId); }
+function sf(section, field, value) {
+  const n = getNovel(); if (!n) return;
+  n[section][field] = value;
+  saveNovels();
+}
+
+// ══════════════════════════════════════════════════════
+// SEED — Daastan-e-Ruhaniyat
+// ══════════════════════════════════════════════════════
+function seedDaastan() {
+  return {
+    id: 1001, color: '#8b2035',
+    overview: {
+      title: 'Daastan-e-Ruhaniyat', subtitle: 'Book 1 — The Singhania Series',
+      logline: 'A one-year contract. Two people with every reason to hate each other. And absolutely no plan for what happens when the year runs out.',
+      synopsis: "Ruhana Mehra has always had a plan. Finish her degrees, build her career, live life on her own terms. Marrying a man who can barely stand to be in the same room as her was never part of it.\n\nKabir Veer Singhania doesn't believe in love. He believes in contracts, in control, and in keeping people exactly far enough away that they can never hurt him again. A one-year arrangement suits him perfectly. Clean. Temporary. No feelings involved.\n\nExcept no one told Ruhana to stop being herself around him. And no one warned Kabir what it would feel like to have someone refuse to give up on him.\n\nOne year. One contract. Two people carrying secrets heavy enough to break them.\n\nWhat happens when the year ends — but the feelings don't?",
+      genre: 'Contemporary Indian Romance', wordCount: '90,000–100,000', status: 'Drafting',
+    },
+    soul: {
+      coretropes: 'Contract Marriage · Arranged Marriage · Forced Proximity · Strangers to Lovers · Slow Burn · She Fell First, He Fell Harder · Enemies to Lovers · Hate to Love · Fake Marriage Real Feelings',
+      dynamictropes: "Cold CEO × Warm Sunshine · Grumpy × Sunshine · Brooding Hero × Witty Heroine · He Doesn't Trust Women Until Her · Walls Up × Slowly Breaking Them Down · Soft for Her and Only Her",
+      vibes: 'Emotional Slow Burn · Laugh Out Loud Moments · Ugly Cry Warning · Found Family Energy · Strong Female Lead · Male Lead Redemption Arc · Cinematic Romance · Banter Heavy · Heartbreak Before Healing · Read with your heart in your throat · Best consumed with chai and a blanket',
+      comps: 'The Shaadi Set-Up · Written in the Stars · Twisted Love · Ana Huang · Lauren Asher · Catharina Maura',
+      targetReader: 'South Asian romance readers, Ana Huang fans, BookTok contemporary romance lovers, ages 20–35',
+      emotionalPromise: "Two broken people choosing each other anyway. Not because they're fixed — but because together, broken feels a little less permanent. This is not a love story about perfect people. It's about two people with cracks in all the right places — and what happens when the light finally gets in.",
+    },
+    aesthetic: {
+      overallAesthetic: 'The kind of love story that starts in silence and ends in surrender.\n\nDark wood boardrooms and soft morning light. Expensive suits and bare feet on cold marble floors. The quiet tension of two people in the same room pretending not to notice each other. And then — slowly, devastatingly — noticing everything.',
+      palette: 'Deep navy and charcoal — his world. Cold. Controlled. Carefully constructed.\nWarm gold and ivory — her world. Bright. Soft. Full of life.\nWhere they meet — burgundy. The colour of something slow and burning and impossible to ignore.',
+      seasonTime: 'Mumbai monsoon evenings · 2am conversations that were never meant to happen · golden hour from a penthouse window',
+      pinterestKeywords: 'old money India aesthetics · moody romance editorial · Mumbai penthouse golden hour · silk saree candlelight · dark academia billionaire · slow burn tension · chai rainy morning · cold CEO warm heroine · monsoon balcony · two people almost kissing',
+    },
+    characters: [
+      { id: 2001, name: 'Ruhana Mehra', role: 'Protagonist', age: '24',
+        appearance: 'Warm brown skin, soft curls that escape every bun she attempts, dimples that appear right before she says something dangerously witty. She laughs with her whole face.',
+        personality: "Sweet. Warm. The kind of person who remembers your coffee order and asks about your mother. Fun-loving, sharp, mature in ways that quietly surprise people who underestimate her.\n\nBut register yourself in her bad books — and you'll meet an entirely different Ruhana. One that smiles too politely and says exactly what she means.",
+        flaw: "Carries a hidden truth about her life that kills her a little every day. She mends others but struggles to apply that same grace to herself.",
+        arc: "Starts: Guarded in her own way — warm to the world but protecting a private wound. Ends: Learns that letting herself be loved is not weakness.",
+        speech: 'Witty, warm, direct. Uses sarcasm like a second language but always with warmth underneath. Never shouts; gets quieter and more precise when truly angry.',
+        aesthetic: 'Oversized blazers over simple outfits · psychology notes covered in colourful highlights · warm chai on rainy mornings · dog-eared romance novels hidden behind textbooks',
+        pinterestKeywords: 'sunshine academia aesthetic · warm girl editorial · oversized blazer outfit · chai morning cozy · sunshine with sharp edges',
+      },
+      { id: 2002, name: 'Kabir Veer Singhania', role: 'Love Interest', age: '26',
+        appearance: "Sharp jawline. Sharper suits. The kind of man who walks into rooms like he already owns them — because he does. A laugh so rare people don't know what to do when they hear it.",
+        personality: "In boardrooms: ruthless, cold, commands every room. Doesn't trust women. Watched too many chase money, status, the Singhania name.\n\nUnderneath all of it — something still waits. Buried deep. Still breathing.",
+        flaw: 'Destroys things before they can hurt him. Goes cold and precise and surgical when threatened. Learned to equate softness with weakness.',
+        arc: "Starts: The youngest CEO in Singhania history, armored in reputation. Ends: Standing at her door knowing she doesn't have to open it. Choosing to fight for something.",
+        speech: 'Clipped. Controlled. Every word chosen with precision. Long silences that say more than most speeches. Rare warmth that shocks people.',
+        aesthetic: 'Black coffee, no sugar, no exceptions · floor-to-ceiling windows at midnight · the city below that belongs to him and feels like nothing · pressed suits, crystal glasses',
+        pinterestKeywords: 'dark CEO aesthetic · old money villain era · silent brooding billionaire · cold luxury penthouse · winter learning what warmth feels like',
+      },
+    ],
+    dynamic: {
+      pushPull: "She refuses to be kept at arm's length. He has never once met someone who wouldn't eventually take the hint and retreat. She doesn't retreat. He keeps waiting for it. It doesn't come. That's when things start to shift.",
+      tensionStyle: "Electric silence. Loaded glances across rooms. Words that mean something else entirely. He adjusts her dupatta without thinking — then pulls his hand back like he burned it.",
+      banterVsSilence: "Heavy banter in the early acts — the kind that crackles with everything unsaid. Then, gradually, the silences become the main event.",
+      whoFallsFirst: "She falls first. Quietly. Completely. In the way that changes everything and can't be undone. He falls second — but falls harder.",
+      coreWound: "Her: a hidden truth she hasn't shared with anyone.\nHim: a boy who trusted easily once, and was broken for it. Learned that caring is danger.",
+      resolution: "He arrives with the one thing he's never offered anyone — the truth. About his past, his fear, every wall and why he built it. She makes him wait. He waits. No contract. No end date. Just a choice, made every single day.",
+    },
+    journey: {
+      acts: [
+        { label: 'Act One — Resistance', beat: 'Walls. Arguments. Two people absolutely certain they want nothing to do with each other. Every conversation is a small war.', emotion: 'Hostility, reluctant cohabitation, pride', wound: 'Both arrive armored — she with her hidden truth, he with his distrust' },
+        { label: 'Act Two — Observation', beat: 'Noticing. Small things. The way she laughs. The way he goes quiet when something matters. Details you only collect when paying more attention than you meant to.', emotion: 'Reluctant curiosity, awareness', wound: 'Both start wondering if their assumptions were wrong' },
+        { label: 'Act Three — Softening', beat: 'Almost moments. Accidental kindness. A cup of chai outside a closed door. A hand that reaches and pulls back too late.', emotion: 'Warmth that surprises them, vulnerability creeping in', wound: 'He wonders if he was wrong about her. She sees the buried boy.' },
+        { label: 'Act Four — Surrender', beat: 'The moment one of them stops pretending. The conversation that happens too late at night to have any defenses left.', emotion: 'Terrifying hope, falling in love', wound: "She falls first. Quietly. In the way that can't be undone." },
+        { label: 'Act Five — Destruction', beat: "He finds out something — or thinks he does. Old wounds ripped open. He destroys it before it can hurt him. She doesn't beg. That's what breaks him later.", emotion: 'Devastating betrayal, cold efficiency, aftermath of silence', wound: 'His core wound fully exposed: he chose the wound over the risk.' },
+        { label: 'Act Six — Reckoning', beat: "The truth finds him. He stands at her door knowing she doesn't have to open it. Shows up. Again. And again.", emotion: 'Accountability, desperate hope, humility hard-won', wound: 'Choosing to be soft anyway. Choosing to fight.' },
+        { label: 'Act Seven — Healing', beat: "Two broken people choosing each other anyway. Not because they're fixed. No contract. No end date. Just a choice made every single day.", emotion: 'Quiet joy, chosen love, peace that feels steadier', wound: 'Healed: she shares her truth. He stays.' },
+      ],
+    },
+    blurb: {
+      short: "She studies broken minds for a living. She wasn't prepared for his.\n\nHe keeps everyone out. He wasn't prepared for her.\n\nOne contract. One year. Neither of them prepared for this.",
+      backCover: "Ruhana Mehra has always had a plan. Finish her degrees, build her career, live life on her own terms. Marrying a man who can barely stand to be in the same room as her was never part of it.\n\nKabir Veer Singhania doesn't believe in love. He believes in contracts, in control, and in keeping people exactly far enough away that they can never hurt him again. A one-year arrangement suits him perfectly. Clean. Temporary. No feelings involved.\n\nExcept no one told Ruhana to stop being herself around him. And no one warned Kabir what it would feel like to have someone refuse to give up on him.\n\nOne year. One contract. Two people carrying secrets heavy enough to break them.\n\nWhat happens when the year ends — but the feelings don't?",
+      booktokHook: "She was supposed to be temporary. He forgot to let her go.\n\n—\n\nHe married her to keep his empire. She married him to escape hers. Neither planned to feel anything.\n\n—\n\nThe contract had an end date. The feelings forgot to check.\n\n—\n\nContract marriage. Slow burn. Enemies to lovers. He fell hardest and he fell last.",
+      long: "Ruhana Mehra — Miss Perfect. BSc, MSc, M.Phil in Psychology, currently eyeing her PhD like it personally owes her something.\n\nKabir Veer Singhania — youngest CEO in Singhania Group history, certified emotionally unavailable.\n\nThe deal is simple. One year. No feelings. No complications.\n\nExcept Ruhana has never once in her life done anything simply.\n\nA story about two broken people, one impossible year, and the kind of love that sneaks up on you before you ever think to stop it.",
+    },
+    settings: [
+      { id:3001, name:'The Singhania Mansion', description:'Sprawling. High ceilings and rooms that feel too big for one person. Dark wood, marble floors, floor-to-ceiling windows. Expensive and immaculate and completely empty of warmth — until she arrives.', emotionalMeaning:"Kabir's armor made physical. Ruhana slowly fills it with noise and light and the smell of chai.", firstAppearance:'Chapter 3' },
+      { id:3002, name:"Kabir's Boardroom", description:'Dark wood desk, leather chair, the Mumbai skyline behind him. He is different here — fully armored, every inch the cold CEO.', emotionalMeaning:'Where he is untouchable. The contrast between this Kabir and the one she slowly uncovers is the whole arc.', firstAppearance:'Chapter 2' },
+      { id:3003, name:'The Rooftop', description:'Quiet evenings, city lights below, just enough distance to say things that cannot be said inside.', emotionalMeaning:'Neutral territory. Where they stop performing and start actually existing together.', firstAppearance:'Chapter 7' },
+      { id:3004, name:'Mehra Family Home', description:'Loud. Warm. Smells like home — spices and laughter and someone always in the kitchen.', emotionalMeaning:"Everything Kabir doesn't have. Seeing Ruhana here is when he first understands what he's been missing.", firstAppearance:'Chapter 5' },
+    ],
+    scenes: [
+      { id:4001, title:'The First Meeting', chapter:'Chapter 1', summary:'Ruhana and Kabir meet for the first time — and it goes exactly as badly as it should.', mood:'Charged hostility. Two people immediately seeing the worst in each other.', colors:'Harsh white light, sharp navy, the cold grey of first impressions', music:'Tense silence. The kind that dares the other person to speak first.', weather:'Mumbai afternoon, glaring sun, the heat making everything more irritating', emotionalTone:"She's unimpressed. He's dismissive. Both are lying to themselves.", tension:'7/10 — Cold, sharp, contained. Two egos refusing to yield.', pinterestKeywords:'hostile first meeting romance · sharp suited man dismissive · cold boardroom tension' },
+      { id:4002, title:'The Dupatta Moment', chapter:'Chapter 11', summary:'Kabir adjusts her dupatta without thinking. Pulls his hand back immediately. Neither acknowledges it. Both think about it for days.', mood:'Achingly tender. The quietest kind of loud.', colors:'Warm gold evening light, burgundy of her outfit, the shadow between them', music:'Something slow in the background. The sound of the house settling.', weather:'Dusk. The hour when the city softens.', emotionalTone:"He did it without thinking — that's the terrifying part. She felt the whole world shift.", tension:'9/10 — Lives in restraint. Nothing happens. Everything happens.', pinterestKeywords:'almost touch romance · dupatta adjustment moment · soft candlelight · almost moment slow burn' },
+      { id:4003, title:'The Rooftop Conversation', chapter:'Chapter 15', summary:'Neither of them planned to be up there. They talk for two hours. The first conversation where no one is performing.', mood:'Quietly revelatory. The moment the walls develop their first real crack.', colors:'Midnight blue sky, amber city glow, soft interior light', music:'Distant traffic. Long comfortable silences.', weather:'Cool Mumbai night, slight breeze', emotionalTone:"He says something true before he can stop himself. She doesn't make a big deal of it. He doesn't know what to do with that.", tension:'6/10 — Warm tension. Not uncomfortable anymore. That makes it dangerous.', pinterestKeywords:'rooftop city lights night · Mumbai skyline romantic · cautious honesty scene' },
+    ],
+    notes: {
+      cultural: "South Asian family dynamics — the weight of family obligation vs personal desire. Mumbai as a character — the contrast between old-money Singhania world and the warm middle-class Mehra world.",
+      hindi: "Dupatta — the scarf/stole, carries enormous weight in the adjustment scene\nYaar — casual term of affection\nBhai/Bhabhi — brother/sister-in-law\nBeta — term of affection from elders\nPyaar — love (used carefully, never cheaply)",
+      continuity: "Kabir: 26, youngest CEO in Singhania history\nRuhana: 24, BSc + MSc Psychology, currently in M.Phil, eyeing PhD\nMarriage contract: 1 year\nSetting: Mumbai\nKabir: black coffee, no sugar, no exceptions\nRuhana: chai person, always\nRuhana's dimples appear before she says something witty — track this",
+      research: "Ana Huang (Twisted series), Lauren Asher, Catharina Maura — voice and pacing references.\nM.Phil in Clinical Psychology: 2-year postgraduate research degree in India.\nSinghania Group — unnamed sector, possibly real estate + hospitality.",
+    },
+  };
+}
+
+function emptyNovel(color) {
+  return {
+    id: Date.now(), color,
+    overview:   { title:'', subtitle:'', logline:'', synopsis:'', genre:'', wordCount:'', status:'Idea' },
+    soul:       { coretropes:'', dynamictropes:'', vibes:'', comps:'', targetReader:'', emotionalPromise:'' },
+    aesthetic:  { overallAesthetic:'', palette:'', seasonTime:'', pinterestKeywords:'' },
+    characters: [],
+    dynamic:    { pushPull:'', tensionStyle:'', banterVsSilence:'', whoFallsFirst:'', coreWound:'', resolution:'' },
+    journey:    { acts: [
+      {label:'Act I — Opening',beat:'',emotion:'',wound:''},
+      {label:'Act II — Rising',beat:'',emotion:'',wound:''},
+      {label:'Act III — Break',beat:'',emotion:'',wound:''},
+      {label:'Act IV — Healing',beat:'',emotion:'',wound:''},
+    ]},
+    blurb:    { short:'', backCover:'', booktokHook:'', long:'' },
+    settings: [],
+    scenes:   [],
+    notes:    { cultural:'', hindi:'', continuity:'', research:'' },
+  };
+}
+
+// ══════════════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════════════
+function showHome() {
+  ['nav-home','nav-novels'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.classList.toggle('active', id==='nav-home');
+  });
+  showPage('page-home');
+  document.getElementById('btn-back').style.display = 'none';
+  document.getElementById('header-sub').textContent = 'Your novels, your worlds';
+  renderHome();
+}
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById('main-scroll').scrollTop = 0;
+}
+function backToHome() { showHome(); }
+function quickJump(sec) {
+  if (!activeId && novels.length > 0) activeId = novels[0].id;
+  if (!activeId) { showToast('Create a novel first'); return; }
+  showPage('page-novel');
+  switchSec(sec, null);
+}
+function openNovel(id) {
+  activeId = id;
+  activeCharId = null; activeSettingId = null; activeSceneId = null;
+  showPage('page-novel');
+  document.getElementById('btn-back').style.display = '';
+  const n = getNovel();
+  document.getElementById('header-sub').textContent = n.overview.title || 'Untitled';
+  // activate first tab
+  document.querySelectorAll('.stab').forEach((t,i) => t.classList.toggle('active', i===0));
+  document.querySelectorAll('.sec-page').forEach((p,i) => p.classList.toggle('active', i===0));
+  fillAll();
+}
+function switchSec(id, btn) {
+  document.querySelectorAll('.sec-page').forEach(p => p.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  document.querySelectorAll('.stab').forEach(t => {
+    t.classList.toggle('active', t.getAttribute('onclick').includes("'"+id+"'"));
+  });
+  if (btn) { document.querySelectorAll('.stab').forEach(t=>t.classList.remove('active')); btn.classList.add('active'); }
+  document.getElementById('main-scroll').scrollTop = 0;
+}
+
+// ══════════════════════════════════════════════════════
+// HOME RENDER
+// ══════════════════════════════════════════════════════
+function renderHome() {
+  const grid = document.getElementById('novels-grid');
+  const stats = document.getElementById('home-stats');
+  if (novels.length > 0) {
+    stats.style.display = 'flex';
+    document.getElementById('s-novels').textContent  = novels.length;
+    document.getElementById('s-chars').textContent   = novels.reduce((a,n)=>a+(n.characters?.length||0),0);
+    document.getElementById('s-scenes').textContent  = novels.reduce((a,n)=>a+(n.scenes?.length||0),0);
+  } else stats.style.display = 'none';
+  grid.innerHTML = '';
+  novels.forEach(n => {
+    const d = document.createElement('div');
+    d.className = 'novel-card'; d.style.borderTopColor = n.color||'#9b59d0';
+    d.innerHTML = `<button class="nc-del" onclick="event.stopPropagation();delNovel(${n.id})">✕</button>
+      <div class="nc-title">${n.overview.title||'Untitled Novel'}</div>
+      <div class="nc-sub">${n.overview.subtitle||''}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+        ${n.overview.status?`<span class="chip">${n.overview.status}</span>`:''}
+        ${n.overview.genre?`<span class="chip">${n.overview.genre}</span>`:''}
+      </div>
+      <div style="font-size:11px;color:var(--text-muted)">${n.characters?.length||0} chars · ${n.scenes?.length||0} scenes</div>`;
+    d.onclick = () => openNovel(n.id);
+    grid.appendChild(d);
+  });
+  const add = document.createElement('div');
+  add.className = 'add-card';
+  add.innerHTML = '<span style="font-size:28px">✦</span><span>New Novel</span>';
+  add.onclick = createNovel;
+  grid.appendChild(add);
+}
+function createNovel() {
+  const colors = ['#8b2035','#9b59d0','#d4af37','#2e86ab','#27ae60','#e67e22'];
+  const n = emptyNovel(colors[novels.length % colors.length]);
+  novels.push(n); saveNovels(); openNovel(n.id);
+}
+function delNovel(id) {
+  if (!confirm('Delete this novel and all its data?')) return;
+  novels = novels.filter(n => n.id !== id); saveNovels(); renderHome();
+}
+
+// ══════════════════════════════════════════════════════
+// FILL ALL FIELDS
+// ══════════════════════════════════════════════════════
+function fillAll() {
+  const n = getNovel(); if (!n) return;
+  sv('ov-title',    n.overview.title);       sv('ov-subtitle', n.overview.subtitle);
+  sv('ov-logline',  n.overview.logline);     sv('ov-synopsis', n.overview.synopsis);
+  sv('ov-genre',    n.overview.genre);       sv('ov-wc',       n.overview.wordCount);
+  sselv('ov-status', n.overview.status);
+  sv('soul-core',  n.soul.coretropes);       sv('soul-dyn',    n.soul.dynamictropes);
+  sv('soul-vibes', n.soul.vibes);            sv('soul-comps',  n.soul.comps);
+  sv('soul-target',n.soul.targetReader);     sv('soul-promise',n.soul.emotionalPromise);
+  sv('aes-mood',   n.aesthetic.overallAesthetic); sv('aes-palette', n.aesthetic.palette);
+  sv('aes-season', n.aesthetic.seasonTime);  sv('aes-pin',     n.aesthetic.pinterestKeywords);
+  sv('dyn-pp', n.dynamic.pushPull);          sv('dyn-ts', n.dynamic.tensionStyle);
+  sv('dyn-bv', n.dynamic.banterVsSilence);   sv('dyn-wf', n.dynamic.whoFallsFirst);
+  sv('dyn-cw', n.dynamic.coreWound);         sv('dyn-res',n.dynamic.resolution);
+  sv('bl-short', n.blurb.short);             sv('bl-back',  n.blurb.backCover);
+  sv('bl-btok',  n.blurb.booktokHook);       sv('bl-long',  n.blurb.long);
+  sv('n-cultural', n.notes.cultural);        sv('n-hindi',    n.notes.hindi);
+  sv('n-cont',     n.notes.continuity);      sv('n-res',      n.notes.research);
+  renderActs(); renderCharTabs(); renderSettingTabs(); renderSceneTabs();
+  document.getElementById('nov-title-display').textContent = n.overview.title || 'Novel Overview';
+}
+function sv(id,val){ const e=document.getElementById(id); if(e) e.value=val||''; }
+function sselv(id,val){ const e=document.getElementById(id); if(e&&val) e.value=val; }
+function updateTitle() {
+  const n = getNovel(); if (!n) return;
+  document.getElementById('nov-title-display').textContent = n.overview.title || 'Novel Overview';
+  document.getElementById('header-sub').textContent = n.overview.title || 'Untitled';
+}
+
+// ══════════════════════════════════════════════════════
+// ACTS
+// ══════════════════════════════════════════════════════
+function renderActs() {
+  const n = getNovel(); if (!n) return;
+  const c = document.getElementById('acts-container'); c.innerHTML = '';
+  const border = ['var(--accent)','var(--rose)','var(--gold)','var(--sapphire)','#27ae60','#e67e22','#8e44ad'];
+  n.journey.acts.forEach((act,i) => {
+    const d = document.createElement('div'); d.className = 'act-card';
+    d.style.borderLeftColor = border[i%border.length];
+    d.innerHTML = `
+      <div class="field"><label class="label">Act Name</label>
+        <input class="input" value="${esc(act.label)}" oninput="updAct(${i},'label',this.value)" placeholder="e.g. Act I — Resistance"/></div>
+      <div class="field"><label class="label">Main Emotional Beat</label>
+        <textarea class="textarea" rows="2" oninput="updAct(${i},'beat',this.value)" placeholder="What happens emotionally…">${esc(act.beat)}</textarea></div>
+      <div class="row2">
+        <div class="field"><label class="label">Dominant Emotion</label>
+          <input class="input" value="${esc(act.emotion)}" oninput="updAct(${i},'emotion',this.value)" placeholder="e.g. Reluctant warmth"/></div>
+        <div class="field"><label class="label">Wound Exposed / Healed</label>
+          <input class="input" value="${esc(act.wound)}" oninput="updAct(${i},'wound',this.value)" placeholder="Internal truth that surfaces…"/></div>
+      </div>`;
+    c.appendChild(d);
+  });
+}
+function updAct(i,f,v){ const n=getNovel(); if(!n)return; n.journey.acts[i][f]=v; saveNovels(); }
+function addAct(){ const n=getNovel(); if(!n)return; n.journey.acts.push({label:`Act ${n.journey.acts.length+1}`,beat:'',emotion:'',wound:''}); saveNovels(); renderActs(); }
+
+// ══════════════════════════════════════════════════════
+// CHARACTERS
+// ══════════════════════════════════════════════════════
+function renderCharTabs() {
+  const n = getNovel(); if (!n) return;
+  const tabs = document.getElementById('char-tabs'); tabs.innerHTML = '';
+  n.characters.forEach(c => {
+    const b = document.createElement('button'); b.className='itab'+(activeCharId===c.id?' active':'');
+    b.textContent = c.name||'Unnamed'; b.onclick = ()=>{ activeCharId=c.id; renderCharTabs(); renderCharEditor(); };
+    tabs.appendChild(b);
+  });
+  if (!activeCharId && n.characters.length) { activeCharId=n.characters[0].id; renderCharTabs(); }
+  renderCharEditor();
+}
+function addChar() {
+  const n=getNovel(); if(!n)return;
+  const c={id:Date.now(),name:'',role:'Protagonist',age:'',appearance:'',personality:'',flaw:'',arc:'',speech:'',aesthetic:'',pinterestKeywords:''};
+  n.characters.push(c); activeCharId=c.id; saveNovels(); renderCharTabs();
+}
+function renderCharEditor() {
+  const n=getNovel(); const ed=document.getElementById('char-editor');
+  if(!n||!activeCharId){ed.innerHTML='';return;}
+  const c=n.characters.find(x=>x.id===activeCharId); if(!c){ed.innerHTML='';return;}
+  ed.innerHTML=`<div class="card" style="border-top:3px solid var(--gold)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--gold)">${c.name||'New Character'}</div>
+      <button class="btn rose sm" onclick="delChar(${c.id})">✕ Remove</button>
+    </div>
+    <div class="row3">
+      <div class="field"><label class="label">Full Name</label><input class="input" value="${esc(c.name)}" oninput="updChar(${c.id},'name',this.value)" placeholder="e.g. Kabir Veer Singhania"/></div>
+      <div class="field"><label class="label">Role</label><select class="sel" onchange="updChar(${c.id},'role',this.value)">${['Protagonist','Love Interest','Antagonist','Best Friend','Mentor','Side Character','Family'].map(r=>`<option${c.role===r?' selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="field"><label class="label">Age</label><input class="input" value="${esc(c.age)}" oninput="updChar(${c.id},'age',this.value)" placeholder="26"/></div>
+    </div>
+    <div class="field"><label class="label">Physical Appearance</label><textarea class="textarea" rows="2" oninput="updChar(${c.id},'appearance',this.value)">${esc(c.appearance)}</textarea></div>
+    <div class="row2">
+      <div class="field"><label class="label">Personality</label><textarea class="textarea" rows="3" oninput="updChar(${c.id},'personality',this.value)">${esc(c.personality)}</textarea></div>
+      <div class="field"><label class="label">Fatal Flaw / Core Wound</label><textarea class="textarea" rows="3" oninput="updChar(${c.id},'flaw',this.value)">${esc(c.flaw)}</textarea></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Character Arc</label><textarea class="textarea" rows="3" oninput="updChar(${c.id},'arc',this.value)">${esc(c.arc)}</textarea></div>
+      <div class="field"><label class="label">Speech Style</label><textarea class="textarea" rows="3" oninput="updChar(${c.id},'speech',this.value)">${esc(c.speech)}</textarea></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Character Aesthetic</label><textarea class="textarea" rows="2" oninput="updChar(${c.id},'aesthetic',this.value)">${esc(c.aesthetic)}</textarea></div>
+      <div class="field"><label class="label">Pinterest Keywords</label><textarea class="textarea" rows="2" oninput="updChar(${c.id},'pinterestKeywords',this.value)">${esc(c.pinterestKeywords)}</textarea></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn acc" onclick="aiChar(${c.id},'develop')"><span id="i-cd">✦</span> Develop Character</button>
+      <button class="btn gold" onclick="aiChar(${c.id},'intro')"><span id="i-ci">✦</span> Write Intro Scene</button>
+    </div>
+    <div id="ai-char"></div>
+  </div>`;
+}
+function updChar(id,f,v){ const n=getNovel(); if(!n)return; const c=n.characters.find(x=>x.id===id); if(c){c[f]=v;saveNovels();if(f==='name')renderCharTabs();} }
+function delChar(id){ if(!confirm('Remove?'))return; const n=getNovel(); if(!n)return; n.characters=n.characters.filter(c=>c.id!==id); activeCharId=n.characters.length?n.characters[0].id:null; saveNovels(); renderCharTabs(); }
+
+// ══════════════════════════════════════════════════════
+// SETTINGS
+// ══════════════════════════════════════════════════════
+function renderSettingTabs() {
+  const n=getNovel(); if(!n)return;
+  const tabs=document.getElementById('setting-tabs'); tabs.innerHTML='';
+  n.settings.forEach(s=>{
+    const b=document.createElement('button'); b.className='itab'+(activeSettingId===s.id?' active':'');
+    b.textContent=s.name||'Unnamed'; b.onclick=()=>{activeSettingId=s.id;renderSettingTabs();renderSettingEditor();};
+    tabs.appendChild(b);
+  });
+  if(!activeSettingId&&n.settings.length){activeSettingId=n.settings[0].id;renderSettingTabs();}
+  renderSettingEditor();
+}
+function addSetting(){ const n=getNovel(); if(!n)return; const s={id:Date.now(),name:'',description:'',emotionalMeaning:'',firstAppearance:''}; n.settings.push(s); activeSettingId=s.id; saveNovels(); renderSettingTabs(); }
+function renderSettingEditor(){
+  const n=getNovel(); const ed=document.getElementById('setting-editor');
+  if(!n||!activeSettingId){ed.innerHTML='';return;}
+  const s=n.settings.find(x=>x.id===activeSettingId); if(!s){ed.innerHTML='';return;}
+  ed.innerHTML=`<div class="card" style="border-top:3px solid var(--sapphire)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+      <div style="font-family:'Playfair Display',serif;font-size:17px;color:var(--sapphire)">${s.name||'New Setting'}</div>
+      <button class="btn rose sm" onclick="delSetting(${s.id})">✕</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Location Name</label><input class="input" value="${esc(s.name)}" oninput="updSetting(${s.id},'name',this.value)"/></div>
+      <div class="field"><label class="label">First Appears</label><input class="input" value="${esc(s.firstAppearance)}" oninput="updSetting(${s.id},'firstAppearance',this.value)" placeholder="Chapter 3"/></div>
+    </div>
+    <div class="field"><label class="label">Description</label><textarea class="textarea" rows="3" oninput="updSetting(${s.id},'description',this.value)">${esc(s.description)}</textarea></div>
+    <div class="field"><label class="label">Emotional Meaning</label><textarea class="textarea" rows="3" oninput="updSetting(${s.id},'emotionalMeaning',this.value)">${esc(s.emotionalMeaning)}</textarea></div>
+    <div class="btn-row"><button class="btn acc" onclick="aiSetting(${s.id})"><span id="i-set">✦</span> Develop Setting</button></div>
+    <div id="ai-setting"></div>
+  </div>`;
+}
+function updSetting(id,f,v){const n=getNovel();if(!n)return;const s=n.settings.find(x=>x.id===id);if(s){s[f]=v;saveNovels();if(f==='name')renderSettingTabs();}}
+function delSetting(id){if(!confirm('Remove?'))return;const n=getNovel();if(!n)return;n.settings=n.settings.filter(s=>s.id!==id);activeSettingId=n.settings.length?n.settings[0].id:null;saveNovels();renderSettingTabs();}
+
+// ══════════════════════════════════════════════════════
+// SCENES
+// ══════════════════════════════════════════════════════
+function renderSceneTabs(){
+  const n=getNovel(); if(!n)return;
+  const tabs=document.getElementById('scene-tabs'); tabs.innerHTML='';
+  n.scenes.forEach(s=>{
+    const b=document.createElement('button'); b.className='itab'+(activeSceneId===s.id?' active':'');
+    b.textContent=s.title||'Untitled'; b.onclick=()=>{activeSceneId=s.id;renderSceneTabs();renderSceneEditor();};
+    tabs.appendChild(b);
+  });
+  if(!activeSceneId&&n.scenes.length){activeSceneId=n.scenes[0].id;renderSceneTabs();}
+  renderSceneEditor();
+}
+function addScene(){const n=getNovel();if(!n)return;const s={id:Date.now(),title:'',chapter:'',summary:'',mood:'',colors:'',music:'',weather:'',emotionalTone:'',tension:'',pinterestKeywords:''};n.scenes.push(s);activeSceneId=s.id;saveNovels();renderSceneTabs();}
+function renderSceneEditor(){
+  const n=getNovel(); const ed=document.getElementById('scene-editor');
+  if(!n||!activeSceneId){ed.innerHTML='';return;}
+  const s=n.scenes.find(x=>x.id===activeSceneId); if(!s){ed.innerHTML='';return;}
+  ed.innerHTML=`<div class="card" style="border-top:3px solid var(--rose)">
+    <div style="display:flex;justify-content:space-between;margin-bottom:14px">
+      <div style="font-family:'Playfair Display',serif;font-size:17px;color:var(--rose)">${s.title||'New Scene'}</div>
+      <button class="btn rose sm" onclick="delScene(${s.id})">✕</button>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Scene Title</label><input class="input" value="${esc(s.title)}" oninput="updScene(${s.id},'title',this.value)"/></div>
+      <div class="field"><label class="label">Chapter / Act</label><input class="input" value="${esc(s.chapter)}" oninput="updScene(${s.id},'chapter',this.value)" placeholder="Chapter 11, Act III"/></div>
+    </div>
+    <div class="field"><label class="label">What Happens</label><textarea class="textarea" rows="2" oninput="updScene(${s.id},'summary',this.value)">${esc(s.summary)}</textarea></div>
+    <div class="row2">
+      <div class="field"><label class="label">Overall Mood</label><input class="input" value="${esc(s.mood)}" oninput="updScene(${s.id},'mood',this.value)" placeholder="e.g. Achingly tender"/></div>
+      <div class="field"><label class="label">Emotional Tone</label><input class="input" value="${esc(s.emotionalTone)}" oninput="updScene(${s.id},'emotionalTone',this.value)"/></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Colour Palette</label><input class="input" value="${esc(s.colors)}" oninput="updScene(${s.id},'colors',this.value)" placeholder="e.g. Warm gold, burgundy"/></div>
+      <div class="field"><label class="label">Weather / Time</label><input class="input" value="${esc(s.weather)}" oninput="updScene(${s.id},'weather',this.value)" placeholder="e.g. Monsoon rain, 11pm"/></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label class="label">Music / Soundtrack</label><input class="input" value="${esc(s.music)}" oninput="updScene(${s.id},'music',this.value)"/></div>
+      <div class="field"><label class="label">Tension Level</label><input class="input" value="${esc(s.tension)}" oninput="updScene(${s.id},'tension',this.value)" placeholder="e.g. 9/10 — lives in restraint"/></div>
+    </div>
+    <div class="field"><label class="label">Pinterest Keywords</label><textarea class="textarea" rows="2" oninput="updScene(${s.id},'pinterestKeywords',this.value)">${esc(s.pinterestKeywords)}</textarea></div>
+    <div class="btn-row">
+      <button class="btn acc" onclick="aiScene(${s.id},'full')"><span id="i-sf">✦</span> Full Mood Board</button>
+      <button class="btn gold" onclick="aiScene(${s.id},'pin')"><span id="i-sp">✦</span> Pinterest Keywords</button>
+      <button class="btn sm" onclick="aiScene(${s.id},'open')"><span id="i-so">✦</span> Scene Opening</button>
+    </div>
+    <div id="ai-scene"></div>
+  </div>`;
+}
+function updScene(id,f,v){const n=getNovel();if(!n)return;const s=n.scenes.find(x=>x.id===id);if(s){s[f]=v;saveNovels();if(f==='title')renderSceneTabs();}}
+function delScene(id){if(!confirm('Remove?'))return;const n=getNovel();if(!n)return;n.scenes=n.scenes.filter(s=>s.id!==id);activeSceneId=n.scenes.length?n.scenes[0].id:null;saveNovels();renderSceneTabs();}
+
+// ══════════════════════════════════════════════════════
+// GEMINI AI
+// ══════════════════════════════════════════════════════
+function getGeminiKey(){ return localStorage.getItem(GEMINI_KEY_STORE)||''; }
+function openGeminiModal(){ const m=document.getElementById('gemini-modal'); m.style.display='flex'; document.getElementById('gemini-key-input').value=getGeminiKey(); setTimeout(()=>document.getElementById('gemini-key-input').focus(),50); }
+function closeGeminiModal(){ document.getElementById('gemini-modal').style.display='none'; }
+function saveGeminiKey(){ const v=document.getElementById('gemini-key-input').value.trim(); if(!v||v.length<10){showToast('Enter a valid key');return;} localStorage.setItem(GEMINI_KEY_STORE,v); closeGeminiModal(); showToast('Gemini key saved ✦'); }
+function clearGeminiKey(){ localStorage.removeItem(GEMINI_KEY_STORE); closeGeminiModal(); showToast('Key removed'); }
+
+async function callGemini(system, user) {
+  const key = getGeminiKey();
+  if (!key) { openGeminiModal(); throw new Error('No Gemini key'); }
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        systemInstruction:{parts:[{text:system}]},
+        contents:[{role:'user',parts:[{text:user}]}],
+        generationConfig:{maxOutputTokens:1000,temperature:0.9}
+      })
+    }
+  );
+  if (!res.ok) {
+    const e = await res.json().catch(()=>({}));
+    if (res.status===400||res.status===403){showToast('Invalid Gemini key');openGeminiModal();}
+    throw new Error(e.error?.message||'API error');
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response';
+}
+
+function spin(id,on){ const e=document.getElementById(id); if(e) e.className=on?'spin':''; }
+function showAI(boxId,text){ const e=document.getElementById(boxId); if(e){e.className='ai-box';e.textContent=text;} }
+
+async function ai(type) {
+  const n = getNovel(); if (!n) return;
+  const t = n.overview.title||'Untitled';
+  const tasks = {
+    soul_vibes:  {si:'i-sv',box:'ai-soul',sys:'You are a BookTok/Bookstagram creative consultant for romance novels.',user:`Novel: "${t}"\nTropes: ${n.soul.coretropes}\n\nSuggest 12 specific evocative mood/vibe tags. Think BookTok language — emotional, immediate.`},
+    soul_tropes: {si:'i-st',box:'ai-soul',sys:'You are a romance genre expert.',user:`Novel: "${t}"\nSynopsis: ${n.overview.synopsis}\n\nSuggest core and character dynamic tropes for this story.`},
+    soul_comps:  {si:'i-sc',box:'ai-soul',sys:'You are a publishing consultant.',user:`Novel: "${t}"\nGenre: ${n.overview.genre}\nTropes: ${n.soul.coretropes}\n\nSuggest 5 comp titles with a one-line reason each.`},
+    aes_full:    {si:'i-af',box:'ai-aes',sys:'You are a visual creative director for romance novels. Think Pinterest boards and sensory detail.',user:`Novel: "${t}"\nPalette: ${n.aesthetic.palette}\nMood: ${n.aesthetic.overallAesthetic}\n\nCreate a rich aesthetic description: color palette, Pinterest keyword phrases, what this novel smells/sounds/feels like.`},
+    aes_pin:     {si:'i-ap',box:'ai-aes',sys:'You know Pinterest search behavior for romance aesthetics.',user:`Novel: "${t}"\nAesthetic: ${n.aesthetic.overallAesthetic}\n\nGive 20 specific Pinterest search phrases. Mix character aesthetics, setting vibes, fashion, color palettes, mood.`},
+    dyn_map:     {si:'i-dm',box:'ai-dyn',sys:'You are an expert in romantic dynamics in contemporary romance.',user:`Novel: "${t}"\nDynamic: ${JSON.stringify(n.dynamic)}\n\nWrite a rich analysis of the romantic dynamic. Include texture of banter vs silence, unspoken language, and 3 scene types that best showcase their chemistry.`},
+    dyn_scene:   {si:'i-ds',box:'ai-dyn',sys:'You write contemporary romance in the style of Ana Huang and Lauren Asher.',user:`Novel: "${t}"\nTension: ${n.dynamic.tensionStyle}\nWho falls first: ${n.dynamic.whoFallsFirst}\n\nWrite a 200-word loaded tension scene. No kissing — pure electricity.`},
+    journey:     {si:'i-j', box:'ai-journey',sys:'You are a story structure expert for romance novels.',user:`Novel: "${t}"\nSynopsis: ${n.overview.synopsis}\n\nMap out a complete emotional journey act-by-act. For each act: main beat, internal wound, relationship status. Include a dark night of the soul and emotional climax.`},
+    blurb_short: {si:'i-bs',box:'ai-blurb',sys:'You write romance back-cover copy that makes people buy books at midnight.',user:`Novel: "${t}"\nTropes: ${n.soul.coretropes}\nSynopsis: ${n.overview.synopsis}\n\nWrite a punchy 3-line short blurb. Emotionally immediate. Contemporary romance voice.`},
+    blurb_full:  {si:'i-bf',box:'ai-blurb',sys:'You write compelling back-cover copy for contemporary romance novels.',user:`Novel: "${t}"\nSynopsis: ${n.overview.synopsis}\nTropes: ${n.soul.coretropes}\n\nWrite a full back-cover blurb (150-200 words). Hook → setup → conflict → emotional stakes → tagline.`},
+    blurb_btok:  {si:'i-bb',box:'ai-blurb',sys:'You write viral BookTok hook lines for romance novels.',user:`Novel: "${t}"\nDynamic: ${n.soul.dynamictropes}\nTropes: ${n.soul.coretropes}\n\nWrite 5 different BookTok hook lines — one emotional, one tense, one trope-based, one about the dynamic, one atmosphere.`},
+  };
+  const task = tasks[type]; if (!task) return;
+  spin(task.si,true);
+  try { showAI(task.box, await callGemini(task.sys, task.user)); }
+  catch(e) { if(e.message!=='No Gemini key') showAI(task.box,'Error — try again.'); }
+  spin(task.si,false);
+}
+
+async function aiChar(id, mode) {
+  const n=getNovel(); if(!n)return; const c=n.characters.find(x=>x.id===id); if(!c)return;
+  const si=mode==='develop'?'i-cd':'i-ci'; spin(si,true);
+  try {
+    let result;
+    if(mode==='develop') result=await callGemini('You are a character development expert for contemporary romance.',`Novel: "${n.overview.title}"\nCharacter: ${c.name} (${c.role}, age ${c.age})\nPersonality: ${c.personality}\nFlaw: ${c.flaw}\n\nDeeply develop this character: 3 contradictions that make them fascinating, their love language, how they show up in conflict, and 10 Pinterest aesthetic keywords.`);
+    else result=await callGemini('You write contemporary romance openings in the style of Ana Huang.',`Novel: "${n.overview.title}"\nCharacter: ${c.name}\nPersonality: ${c.personality}\nAesthetic: ${c.aesthetic}\n\nWrite a 150-word introductory scene that establishes this character's personality and aesthetic immediately.`);
+    showAI('ai-char',result);
+  } catch(e){ if(e.message!=='No Gemini key') showAI('ai-char','Error — try again.'); }
+  spin(si,false);
+}
+
+async function aiSetting(id) {
+  const n=getNovel(); if(!n)return; const s=n.settings.find(x=>x.id===id); if(!s)return;
+  spin('i-set',true);
+  try { showAI('ai-setting', await callGemini('You are a setting expert for contemporary romance. You understand how place carries emotional weight.',`Novel: "${n.overview.title}"\nSetting: ${s.name}\nDescription: ${s.description}\nEmotional meaning: ${s.emotionalMeaning}\n\nWrite a rich sensory description, its emotional meaning in the story, and 5 Pinterest keywords.`)); }
+  catch(e){ if(e.message!=='No Gemini key') showAI('ai-setting','Error — try again.'); }
+  spin('i-set',false);
+}
+
+async function aiScene(id, mode) {
+  const n=getNovel(); if(!n)return; const s=n.scenes.find(x=>x.id===id); if(!s)return;
+  const icons={full:'i-sf',pin:'i-sp',open:'i-so'}; spin(icons[mode],true);
+  try {
+    let result;
+    if(mode==='full') result=await callGemini('You are a visual creative director and sensory writing coach.',`Novel: "${n.overview.title}"\nScene: ${s.title}\nMood: ${s.mood}\nColors: ${s.colors}\n\nCreate a complete sensory mood board: color palette, soundtrack suggestions, weather/light, texture of tension, and 15 Pinterest search phrases.`);
+    else if(mode==='pin') result=await callGemini('You know Pinterest search behavior for romance scene aesthetics.',`Novel: "${n.overview.title}"\nScene: ${s.title}\nMood: ${s.mood}\nColors: ${s.colors}\nTone: ${s.emotionalTone}\n\nGive 20 hyper-specific Pinterest keywords. Mix setting, character styling, mood, color palette, atmospheric descriptors.`);
+    else result=await callGemini('You write contemporary romance scene openings in the style of Ana Huang.',`Novel: "${n.overview.title}"\nScene: ${s.title}\nMood: ${s.mood}\nTension: ${s.tension}\nTone: ${s.emotionalTone}\n\nWrite the opening 3 lines. Establish mood, sensory atmosphere, and emotional charge immediately.`);
+    showAI('ai-scene',result);
+  } catch(e){ if(e.message!=='No Gemini key') showAI('ai-scene','Error — try again.'); }
+  spin(icons[mode],false);
+}
+
+// ══════════════════════════════════════════════════════
+// CLOUD STATUS (mirrors reading journal pattern)
+// ══════════════════════════════════════════════════════
+window.setCloudStatus = function(state, detail) {
+  const pill = document.getElementById('cloudPill');
+  const lbl  = document.getElementById('cloudLabel');
+  if (!pill) return;
+  pill.className = 'cloud-pill ' + state;
+  if (state === 'connected') {
+    lbl.textContent = 'Synced';
+    document.getElementById('btn-google-signin').style.display = 'none';
+    document.getElementById('btn-signout').style.display = '';
+  } else if (state === 'syncing') {
+    lbl.textContent = 'Syncing…';
+  } else if (state === 'signedout') {
+    lbl.textContent = 'Sign in';
+    document.getElementById('btn-google-signin').style.display = '';
+    document.getElementById('btn-signout').style.display = 'none';
+  } else if (state === 'error') {
+    lbl.textContent = 'Offline';
+  }
+};
+
+window._cloudReady = async function() {
+  await pullFromCloud();
+};
+
+function cloudStatusMsg(msg) {
+  const el = document.getElementById('cloud-status-msg'); if(el) el.textContent = msg;
+}
+
+// ══════════════════════════════════════════════════════
+// CLOUD MODAL
+// ══════════════════════════════════════════════════════
+function openCloudModal()  { document.getElementById('cloudModal').classList.add('open'); }
+function closeCloudModal() { document.getElementById('cloudModal').classList.remove('open'); }
+
+function signInGoogle() {
+  const fb = window.__fb; if (!fb) { showToast('Firebase not configured'); return; }
+  const provider = new fb.GoogleAuthProvider();
+  fb.signInWithRedirect(fb.auth, provider);
+}
+
+function doSignOut() {
+  const fb = window.__fb; if (!fb) return;
+  fb.signOut(fb.auth).then(() => { showToast('Signed out'); closeCloudModal(); });
+}
+
+// ══════════════════════════════════════════════════════
+// CLOUD UPLOAD
+// ══════════════════════════════════════════════════════
+async function cloudUpload() {
+  const fb = window.__fb;
+  if (!fb || !fb.auth.currentUser) { cloudStatusMsg('Sign in first to upload.'); return; }
+  cloudStatusMsg('Uploading…');
+  window.setCloudStatus('syncing');
+  try {
+    const uid = fb.auth.currentUser.uid;
+    const batch = fb.writeBatch(fb.db);
+    // Store each novel as its own document
+    novels.forEach(n => {
+      const ref = fb.doc(fb.db, 'users', uid, 'wu_novels', String(n.id));
+      batch.set(ref, { ...n, _updatedAt: Date.now() });
+    });
+    await batch.commit();
+    window.setCloudStatus('connected');
+    cloudStatusMsg(`✓ Uploaded ${novels.length} novel${novels.length===1?'':'s'}.`);
+    showToast('Uploaded to cloud ✦');
+  } catch(e) {
+    window.setCloudStatus('error');
+    cloudStatusMsg('Upload failed: ' + (e.message||e.code));
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// CLOUD PULL
+// ══════════════════════════════════════════════════════
+async function pullFromCloud() {
+  const fb = window.__fb;
+  if (!fb || !fb.auth.currentUser) return;
+  try {
+    const uid = fb.auth.currentUser.uid;
+    const snap = await fb.getDocs(fb.collection(fb.db, 'users', uid, 'wu_novels'));
+    if (snap.empty) return;
+    const cloud = [];
+    snap.forEach(d => { const data = d.data(); delete data._updatedAt; cloud.push(data); });
+    if (cloud.length > 0) {
+      novels = cloud;
+      saveNovels();
+      renderHome();
+      showToast('Synced from cloud ✦');
+    }
+  } catch(e) { console.warn('[WU cloud pull]', e); }
+}
+
+async function cloudPull() {
+  cloudStatusMsg('Pulling from cloud…');
+  await pullFromCloud();
+  cloudStatusMsg('Done.');
+}
+
+// Auto-sync: debounced push after every save
+let _syncTimer = null;
+function cloudAutoSync() {
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(async () => {
+    const fb = window.__fb;
+    if (!fb || !fb.auth.currentUser) return;
+    try {
+      const uid = fb.auth.currentUser.uid;
+      const batch = fb.writeBatch(fb.db);
+      novels.forEach(n => {
+        const ref = fb.doc(fb.db, 'users', uid, 'wu_novels', String(n.id));
+        batch.set(ref, { ...n, _updatedAt: Date.now() });
+      });
+      await batch.commit();
+      window.setCloudStatus('connected');
+    } catch(e) { console.warn('[WU auto-sync]', e); }
+  }, 2000);
+}
+
+// ══════════════════════════════════════════════════════
+// EXPORT / IMPORT
+// ══════════════════════════════════════════════════════
+function exportData() {
+  const blob = new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),novels},null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `writers-universe-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  showToast('Backup exported ✦');
+}
+
+// ══════════════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════════════
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function showToast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ══════════════════════════════════════════════════════
+// HEADER AI KEY BUTTON — add to header dynamically
+// ══════════════════════════════════════════════════════
+(function(){
+  const hr = document.querySelector('.header-right');
+  const btn = document.createElement('button');
+  btn.className='hbtn'; btn.textContent='✦ AI Key';
+  btn.onclick = openGeminiModal;
+  hr.insertBefore(btn, hr.querySelector('.hbtn.gold'));
+})();
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+loadNovels();
+renderHome();
+</script>
+</body>
+</html>
